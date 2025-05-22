@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+.env
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
+
+# Project specific
+*.srt
+*.xlsx
+*.xls
+*.csv
+!example.xlsx
+!example.csv
