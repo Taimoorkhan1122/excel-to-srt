@@ -8,6 +8,11 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
+def ensure_results_dir():
+    results_dir = os.path.join(os.path.dirname(__file__), 'results')
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    return results_dir
 
 class ConverterThread(QThread):
     update_status = pyqtSignal(str)
@@ -20,16 +25,19 @@ class ConverterThread(QThread):
     def run(self):
         try:
             self.update_status.emit("Converting...")
+            results_dir = ensure_results_dir()
             csv_file = self.file_path
 
             if self.file_path.lower().endswith(('.xls', '.xlsx')):
                 df = pd.read_excel(self.file_path)
-                csv_file = self.file_path.rsplit('.', 1)[0] + '.csv'
+                base_name = os.path.basename(self.file_path)
+                csv_name = os.path.splitext(base_name)[0] + '.csv'
+                csv_file = os.path.join(results_dir, csv_name)
                 df.to_csv(csv_file, index=False, encoding='utf-8')
 
             self.convert_csv_to_srt(csv_file)
             self.update_status.emit("Conversion completed")
-            self.show_message.emit("Success", "File converted successfully!")
+            self.show_message.emit("Success", "File converted successfully! Check the 'results' folder.")
 
         except Exception as e:
             self.update_status.emit("Error occurred")
@@ -96,7 +104,11 @@ class ConverterThread(QThread):
             srt_lines.append(subtitle_text)
             srt_lines.append('')
 
-        srt_file = csv_file.rsplit('.', 1)[0] + '.srt'
+        results_dir = ensure_results_dir()
+        base_name = os.path.basename(csv_file)
+        srt_name = os.path.splitext(base_name)[0] + '.srt'
+        srt_file = os.path.join(results_dir, srt_name)
+        
         with open(srt_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(srt_lines))
 
