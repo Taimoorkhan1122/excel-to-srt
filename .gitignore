@@ -31,3 +31,6 @@ build/
 *.csv
 !example.xlsx
 !example.csv
+
+results/
+!results/.gitkeep
