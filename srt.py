@@ -18,26 +18,25 @@ class ConverterThread(QThread):
     update_status = pyqtSignal(str)
     show_message = pyqtSignal(str, str)
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, output_dir=None, output_filename=None):
         super().__init__()
         self.file_path = file_path
+        self.output_dir = output_dir
+        self.output_filename = output_filename
 
     def run(self):
         try:
             self.update_status.emit("Converting...")
-            results_dir = ensure_results_dir()
-            csv_file = self.file_path
+            results_dir = self.output_dir or ensure_results_dir()
 
-            if self.file_path.lower().endswith(('.xls', '.xlsx')):
+            if self.file_path.lower().endswith((".xls", ".xlsx")):
                 df = pd.read_excel(self.file_path)
-                base_name = os.path.basename(self.file_path)
-                csv_name = os.path.splitext(base_name)[0] + '.csv'
-                csv_file = os.path.join(results_dir, csv_name)
-                df.to_csv(csv_file, index=False, encoding='utf-8')
+            else:
+                df = pd.read_csv(self.file_path)
 
-            self.convert_csv_to_srt(csv_file)
+            self.convert_df_to_srt(df, results_dir, self.output_filename)
             self.update_status.emit("Conversion completed")
-            self.show_message.emit("Success", "File converted successfully! Check the 'results' folder.")
+            self.show_message.emit("Success", f"File converted successfully! Check the '{results_dir}' folder.")
 
         except Exception as e:
             self.update_status.emit("Error occurred")
@@ -85,8 +84,7 @@ class ConverterThread(QThread):
         end_time = start_time + duration
         return f"{end_time.hour:02d}:{end_time.minute:02d}:{end_time.second:02d},{end_time.microsecond//1000:03d}"
 
-    def convert_csv_to_srt(self, csv_file):
-        df = pd.read_csv(csv_file)
+    def convert_df_to_srt(self, df, output_dir=None, output_filename=None):
         required_columns = ['\u30da\u30fc\u30b8\u30ca\u30f3\u30d0\u30fc', '\u9001\u51fa\u30bf\u30a4\u30df\u30f3\u30b0', 'Duration', '\u5b57\u5e55\u6587\u5b57\u5217']
         for col in required_columns:
             if col not in df.columns:
@@ -104,11 +102,13 @@ class ConverterThread(QThread):
             srt_lines.append(subtitle_text)
             srt_lines.append('')
 
-        results_dir = ensure_results_dir()
-        base_name = os.path.basename(csv_file)
-        srt_name = os.path.splitext(base_name)[0] + '.srt'
-        srt_file = os.path.join(results_dir, srt_name)
-        
+        output_dir = output_dir or ensure_results_dir()
+        if output_filename:
+            if not output_filename.lower().endswith('.srt'):
+                output_filename += '.srt'
+            srt_file = os.path.join(output_dir, output_filename)
+        else:
+            srt_file = os.path.join(output_dir, 'output.srt')
         with open(srt_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(srt_lines))
 
@@ -118,6 +118,7 @@ class SimpleConverterApp(QWidget):
         super().__init__()
         self.setWindowTitle("Simple Excel to SRT Converter")
         self.setGeometry(100, 100, 500, 200)
+        self.output_dir = None
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Select Excel/CSV File:"))
@@ -128,8 +129,25 @@ class SimpleConverterApp(QWidget):
         browse_button.clicked.connect(self.browse_file)
         file_layout.addWidget(self.file_path_input)
         file_layout.addWidget(browse_button)
-
         layout.addLayout(file_layout)
+
+        # Output filename input
+        filename_layout = QHBoxLayout()
+        filename_label = QLabel("Output Filename:")
+        self.filename_input = QLineEdit()
+        self.filename_input.setPlaceholderText("example.srt (optional)")
+        filename_layout.addWidget(filename_label)
+        filename_layout.addWidget(self.filename_input)
+        layout.addLayout(filename_layout)
+
+        # Add Save to... button
+        save_layout = QHBoxLayout()
+        self.save_to_label = QLabel("Output: results/")
+        save_to_button = QPushButton("Save to...")
+        save_to_button.clicked.connect(self.select_output_dir)
+        save_layout.addWidget(self.save_to_label)
+        save_layout.addWidget(save_to_button)
+        layout.addLayout(save_layout)
 
         self.status_label = QLabel("Ready")
         layout.addWidget(self.status_label)
@@ -150,14 +168,24 @@ class SimpleConverterApp(QWidget):
         if path:
             self.file_path_input.setText(path)
 
+    def select_output_dir(self):
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Output Folder", "")
+        if dir_path:
+            self.output_dir = dir_path
+            self.save_to_label.setText(f"Output: {dir_path}")
+        else:
+            self.output_dir = None
+            self.save_to_label.setText("Output: results/")
+
     def start_conversion(self):
         file_path = self.file_path_input.text().strip()
+        output_filename = self.filename_input.text().strip()
         if not file_path or not os.path.exists(file_path):
             QMessageBox.critical(self, "Error", "Please select a valid file.")
             return
 
         self.status_label.setText("Starting conversion...")
-        self.thread = ConverterThread(file_path)
+        self.thread = ConverterThread(file_path, self.output_dir, output_filename)
         self.thread.update_status.connect(self.status_label.setText)
         self.thread.show_message.connect(lambda title, msg: QMessageBox.information(self, title, msg))
         self.thread.start()
